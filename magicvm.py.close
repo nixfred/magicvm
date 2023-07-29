@@ -1,0 +1,105 @@
+# Here is the updated code where the default ISO file path has been changed to /var/lib/libvirt/images/linuxmint-21.2-cinnamon-64bit.iso
+
+import os
+import subprocess
+
+# The ASCII art for the banner
+banner = """
+ __   __  ___  ____    _    ____  __  __ ___ _   _ 
+ \ \ / / |_ _|| __ )  / \  / ___||  \/  |_ _| \ | |
+  \ V /   | | |  _ \ / _ \ \___ \| |\/| || ||  \| |
+   | |    | | | |_) / ___ \ ___) | |  | || || |\  |
+   |_|   |___||____/_/   \_\____/|_|  |_|___|_| \_|
+"""
+
+# Function to get the VM parameters from the user
+def get_vm_params():
+    print(banner)  # Print the banner
+
+    # Get the VM parameters from the user
+    vm_name = input("Enter a name for the VM [VM]: ") or "VM"
+    ram_size = input("Enter the amount of RAM for the VM in MB [8000MB]: ") or "8000"
+    disk_size = input("Enter the size of the virtual drive in MB [100000MB]: ") or "100000"
+    iso_file = input("Enter the name or full path of the ISO file [/var/lib/libvirt/images/linuxmint-21.2-cinnamon-64bit.iso]: ") or "/var/lib/libvirt/images/linuxmint-21.2-cinnamon-64bit.iso"
+    vcpus = input("Enter the number of vCPUs for the VM [8]: ") or "8"
+
+    return vm_name, ram_size, disk_size, iso_file, vcpus
+
+
+# Function to create a new VM
+def create_vm(vm_name, ram_size, disk_size, iso_file, vcpus):
+    print("Creating the VM...")
+
+    # The command to create a new VM
+    cmd_create_vm = [
+        "virt-install",
+        "--name", vm_name,
+        "--ram", ram_size,
+        "--vcpus", vcpus,
+        "--os-type", "linux",
+        "--os-variant", "generic",
+        "--graphics", "none",
+        "--console", "pty,target_type=serial",
+        "--location", iso_file,
+        "--disk", f"vol=default/{vm_name}.qcow2,bus=virtio,size={disk_size},format=qcow2,sparse=true",
+        "--network", "network=default,model=virtio",
+        "--extra-args", "console=ttyS0,115200n8 serial"
+    ]
+
+    # Run the command
+    result = subprocess.run(cmd_create_vm)
+
+    # If the command failed, print an error message
+    if result.returncode != 0:
+        print("VM creation failed. Please check the error messages and try again.")
+        return False
+
+    print("VM created successfully.")
+    return True
+
+
+# Function to upgrade a VM
+def upgrade_vm(vm_name):
+    print("Upgrading the VM...")
+
+    # The command to upgrade a VM
+    cmd_upgrade_vm = [
+        "virt-clone",
+        "--original", vm_name,
+        "--name", f"{vm_name}-upgraded",
+        "--auto-clone"
+    ]
+
+    # Run the command
+    result = subprocess.run(cmd_upgrade_vm)
+
+    # If the command failed, print an error message
+    if result.returncode != 0:
+        print("VM upgrade failed. Please check the error messages and try again.")
+        return False
+
+    print("VM upgraded successfully.")
+    return True
+
+
+# The main function
+def main():
+    # Get the VM parameters from the user
+    vm_name, ram_size, disk_size, iso_file, vcpus = get_vm_params()
+
+    # Create a new VM
+    if not create_vm(vm_name, ram_size, disk_size, iso_file, vcpus):
+        print("Failed to create the VM. Please check the logs for more details.")
+        return
+
+    # Upgrade the VM
+    if not upgrade_vm(vm_name):
+        print("Failed to upgrade the VM. Please check the logs for more details.")
+        return
+
+    print("The VM has been created and upgraded successfully.")
+
+
+# Run the main function
+if __name__ == "__main__":
+    main()
