@@ -2,6 +2,15 @@
 import os
 import random
 import subprocess
+import logging
+from pathlib import Path
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+
+DEFAULT_RAM_GB = "8"  # Default RAM size in GB
+DEFAULT_DISK_GB = "10"  # Default Disk size in GB
+DEFAULT_ISO_PATH = "/var/lib/libvirt/images/magicvm.iso"
 
 def print_ascii_art():
     ascii_art = r"""
@@ -13,84 +22,64 @@ def print_ascii_art():
     """
     print(ascii_art)
 
-def get_vm_name():
-    vm_name = input("Enter a name for the VM: ")
-    return vm_name.strip() or f"{random.choice(['magic', 'wizard', 'sorcerer'])}-{random.choice(['cat', 'wand', 'spell'])}"
+def get_input(prompt, default_value):
+    user_input = input(f"{prompt} [{default_value}]: ").strip()
+    return user_input or default_value
 
-def get_ram_size():
-    default_ram = "8000"
-    ram_size = input(f"Enter amount of RAM for the VM in MB [{default_ram}MB]: ")
-    return ram_size.strip() or default_ram
+def validate_file_path(file_path):
+    if not Path(file_path).exists():
+        logging.error(f"File not found: {file_path}")
+        raise FileNotFoundError(f"File {file_path} does not exist.")
+    return file_path
 
-def get_disk_size():
-    default_disk = "10000"  # Lowered the default disk size to 10000 MB
-    disk_size = input(f"Enter the size of the virtual drive in MB [{default_disk}MB]: ")
-    return disk_size.strip() or default_disk
+def check_storage_pool_space(required_size_gb):
+    pool_info_cmd = ["virsh", "pool-info", "default"]
+    try:
+        output = subprocess.check_output(pool_info_cmd, text=True)
+        for line in output.splitlines():
+            if "Available" in line:
+                available_space_gb = float(line.split(":")[1].strip().split()[0])  # Get available space in GB
+                if required_size_gb > available_space_gb:
+                    raise ValueError(
+                        f"Requested disk size ({required_size_gb} GB) exceeds available space ({available_space_gb} GB)."
+                    )
+    except subprocess.CalledProcessError:
+        raise RuntimeError("Failed to retrieve storage pool information.")
 
-def get_iso_file():
-    default_iso_path = "/home/pi/Downloads/magicvm.iso"
-    iso_file = input(f"Enter the name or full path of the ISO file [{default_iso_path}]: ")
-    return iso_file.strip() or default_iso_path
+def run_command(command, description=""):
+    logging.info(f"Executing: {description or ' '.join(command)}")
+    try:
+        subprocess.run(command, check=True, text=True)
+    except subprocess.CalledProcessError as e:
+        logging.error(f"Command failed: {e.cmd}\nError: {e.output}")
+        raise
 
-def create_vm(vm_name, ram_size, disk_size, iso_file):
-    cmd_create_vm = [
+def create_vm(vm_name, ram_size_gb, disk_size_gb, iso_file):
+    check_storage_pool_space(int(disk_size_gb))
+    cmd = [
         "virt-install",
         "--name", vm_name,
-        "--ram", f"{ram_size}",
-        "--disk", f"pool=default,size={disk_size}",
+        "--ram", str(int(ram_size_gb) * 1024),  # Convert GB to MB for RAM
+        "--disk", f"pool=default,size={disk_size_gb},format=qcow2",  # Explicit size in GB
         "--vcpus", "2",
         "--os-variant", "ubuntu20.04",
         "--network", "bridge=virbr0",
         "--graphics", "none",
-        "--import",
         "--cdrom", iso_file,
     ]
-    subprocess.run(cmd_create_vm, check=True)  # Throw exception if command fails
-
-def upgrade_vm(vm_name):
-    cmd_shutdown = ["virsh", "shutdown", vm_name]
-    subprocess.run(cmd_shutdown, check=True)  # Throw exception if command fails
-
-    cmd_resize_disk = [
-        "virt-resize",
-        "--expand", "/dev/sda1",
-        f"{vm_name}-disk", f"{vm_name}-disk-resized"
-    ]
-    subprocess.run(cmd_resize_disk, check=True)  # Throw exception if command fails
-
-    cmd_replace_disk = [
-        "virsh",
-        "undefine",
-        vm_name,
-    ]
-    subprocess.run(cmd_replace_disk, check=True)  # Throw exception if command fails
-
-    cmd_define_vm = [
-        "virsh",
-        "define",
-        f"{vm_name}-disk-resized",
-    ]
-    subprocess.run(cmd_define_vm, check=True)  # Throw exception if command fails
-
-    cmd_start = ["virsh", "start", vm_name]
-    subprocess.run(cmd_start, check=True)  # Throw exception if command fails
-
-    os.remove(f"{vm_name}-disk-resized")
+    run_command(cmd, f"Creating VM '{vm_name}'")
 
 if __name__ == "__main__":
     print_ascii_art()
-    vm_name = get_vm_name()
-    ram_size = get_ram_size()
-    disk_size = get_disk_size()
-    iso_file = get_iso_file()
-
     try:
-        print("Creating the VM...")
-        create_vm(vm_name, ram_size, disk_size, iso_file)
+        vm_name = get_input("Enter a name for the VM", f"{random.choice(['magic', 'wizard', 'sorcerer'])}-{random.choice(['cat', 'wand', 'spell'])}")
+        ram_size_gb = get_input("Enter amount of RAM for the VM in GB", DEFAULT_RAM_GB)
+        disk_size_gb = get_input("Enter the size of the virtual drive in GB", DEFAULT_DISK_GB)
+        iso_file = validate_file_path(get_input("Enter the name or full path of the ISO file", DEFAULT_ISO_PATH))
 
-        print("Upgrading the VM...")
-        upgrade_vm(vm_name)
-    except subprocess.CalledProcessError as e:
-        print(f"An error occurred while executing a command: {e.cmd}\nError message: {e.output}")
-    else:
-        print("VM creation and upgrade completed successfully!")
+        logging.info("Starting VM creation process...")
+        create_vm(vm_name, ram_size_gb, disk_size_gb, iso_file)
+
+        logging.info("VM creation completed successfully!")
+    except Exception as e:
+        logging.error(f"An error occurred: {e}")
