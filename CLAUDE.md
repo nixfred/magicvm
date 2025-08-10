@@ -62,6 +62,39 @@ git push origin master
 
 - VMs are created in the "default" libvirt storage pool
 - Disk format is qcow2 for efficient storage
-- VMs are configured as headless (no graphics) by default
-- OS variant is hardcoded to ubuntu20.04 - may need adjustment for other distros
+- VMs are configured with serial console for headless access
+- OS variant is set to "generic" for broad compatibility
 - The tool checks available storage space before creating VMs to prevent failures
+
+## Project Vision & Next Steps
+
+### Current State (v0.9)
+The script is functional but requires user interaction for each VM parameter. It successfully creates VMs but lacks the "magic" that would make it truly effortless.
+
+### Vision for v1.0
+Transform MagicVM into a tool where VM creation is as simple as:
+```bash
+magicvm ubuntu-test
+```
+
+### Key Questions Being Addressed
+1. **Use Case Definition**: Determining if this is for quick testing, lab automation, or learning
+2. **Interface Design**: Balancing simplicity with flexibility
+3. **Automation Level**: How much should be automatic vs configurable
+4. **Network & SSH**: Auto-configuration of networking and SSH access
+5. **Template System**: Pre-configured VMs for common scenarios
+
+### Development Approach
+- Interview-driven design to understand real user needs
+- Iterative development with user feedback
+- Focus on removing friction from VM creation
+- Keep advanced features optional
+
+### Next Implementation Steps
+1. Gather requirements through user interview
+2. Design minimal command-line interface
+3. Implement smart defaults and templates
+4. Add automation for common tasks (SSH keys, networking)
+5. Create preset configurations for common use cases
+
+See ROADMAP.md for detailed development phases.
